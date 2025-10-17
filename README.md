@@ -1,4 +1,4 @@
-# DisCrypt
+# DisCrypt - Beta
 The idea is just to talk via discord in an secure way (mostly in dm for  now)
 
 You first add a peer (with the channel id of the dm with him), then you can freely chat with him, without anyone else, knowing what your conversation is about.
