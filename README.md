@@ -21,3 +21,4 @@ TODO:
 - forward secrecy (exchange new keypair every n message)
 - prevent xss / any dom vulnerability
 - patch bugs
+- import / export keys + secure the keys with a password.
