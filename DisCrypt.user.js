@@ -2,7 +2,7 @@
 // @name         DisCrypt
 // @version      1.0
 // @description  auto encrypt / decrypt your messages
-// @author       Ender
+// @author       NotTrueFalse
 // @match        https://discord.com/*
 // @match        https://*.discord.com/*
 // @run-at       document-end
