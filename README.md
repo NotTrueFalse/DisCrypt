@@ -3,7 +3,7 @@ The idea is just to talk via discord in an secure way (mostly in dm for  now)
 
 You first add a peer (with the channel id of the dm with him), then you can freely chat with him, without anyone else, knowing what your conversation is about.
 
-It's a step further in security, to make discord a safer place, and to prevent, even if you're acconut get compromised, your message to get compromised too.
+It's a step further in security, to make discord a safer place, and to prevent, even if your account get compromised, your message to get compromised too.
 
 Draw back:
 - if your computer get compromised, the attacker can get your private key (and the public key of the peer) and decrypt all the message.
