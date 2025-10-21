@@ -13,12 +13,12 @@ Draw back:
 I'm using nacl box method, meaning X25519 ECDH + XSalsa20-Poly1305.
 
 TODO:
-- edit message function
-- reply message function
-- file encryption / decryption
-- rewrite for easier understanding
-- edit the gui so its easier to add user
-- forward secrecy (exchange new keypair every n message)
-- prevent xss / any dom vulnerability
-- patch bugs
-- import / export keys + secure the keys with a password.
+- [  ] edition handling (almost)
+- [x] reply handling
+- [  ] file encryption / decryption
+- [  ] rewrite for easier understanding
+- [  ] edit the gui so its easier to add user
+- [  ] forward secrecy (exchange new keypair every n message)
+- [  ] prevent xss / any dom vulnerability
+- [  ] patch bugs
+- [  ] import / export keys + secure the keys with a password.

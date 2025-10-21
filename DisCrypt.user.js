@@ -156,33 +156,71 @@ initialisation of everything.
                     try {
                         if (!module.exports || module.exports === window) continue;
                         for (let oo in module.exports) {
+                            if (found) return;
                             let multiple_functions = module.exports[oo];
-                            for (let function_name of ["sendMessage"]) {// ,"receiveMessage"]) {
-                                if (found) return;
+                            for (let function_name of ["sendMessage", "editMessage", "patchMessageAttachments"]) {// "getSendMessageOptionsForReply","receiveMessage"]) {
                                 if (function_name in multiple_functions && multiple_functions[function_name][Symbol.toStringTag] != "IntlMessagesProxy") {
                                     window.base_functions[function_name] = multiple_functions[function_name];
-                                    multiple_functions[function_name] = async (...args) => {
-                                        let channel_id = args[0];
-                                        let message = args[1];
-                                        if (channel_id in known_peer) {
-                                            selected_peer_userId = channel_id;
-                                        }
-                                        // console.log("discrypt:",message);
-                                        if (!("id" in message) && selected_peer_userId) {
-                                            //!("id in message) => before pending state, we can modify content here
-                                            const encrypted = await encryptMessage(message.content, known_peer[selected_peer_userId]);
-                                            if (!encrypted) {
-                                                alert('Message encryption failed !');
-                                                return;
+                                    // console.log(function_name, multiple_functions[function_name]);
+                                    switch (function_name) {
+                                        case "sendMessage":
+                                            multiple_functions[function_name] = async (...args) => {
+                                                let channel_id = args[0];
+                                                let message = args[1];
+                                                if (channel_id in known_peer) {
+                                                    selected_peer_userId = channel_id;
+                                                }
+                                                // console.log("discrypt:", message);
+                                                if (!("id" in message) && selected_peer_userId) {
+                                                    //!("id in message) => before pending state, we can modify content here
+                                                    const encrypted = await encryptMessage(message.content, known_peer[selected_peer_userId]);
+                                                    if (!encrypted) {
+                                                        alert('Message encryption failed !');
+                                                        return;
+                                                    }
+                                                    // Format: [prefix][nonce]:[ciphertext]:[senderPubKey]:[known_peer[selected_peer_userId]]
+                                                    const encryptedMessage = `${prefix}${encrypted.nonce}:${encrypted.ciphertext}:${encrypted.senderPubKey}:${known_peer[selected_peer_userId]}`;
+                                                    message["content"] = encryptedMessage;
+                                                    args[1] = message;
+                                                }
+                                                return window.base_functions[function_name](...args);
+                                            };
+                                            break;
+                                        case "editMessage":
+                                            multiple_functions[function_name] = async (...args) => {
+                                                let channel_id = args[0];
+                                                // let message_id = args[1];
+                                                let message = args[2];
+                                                if (channel_id in known_peer) {
+                                                    selected_peer_userId = channel_id;
+                                                }
+                                                if (selected_peer_userId) {
+                                                    const encrypted = await encryptMessage(message.content, known_peer[selected_peer_userId]);
+                                                    if (!encrypted) {
+                                                        alert('Message encryption failed !');
+                                                        return;
+                                                    }
+                                                    const encryptedMessage = `${prefix}${encrypted.nonce}:${encrypted.ciphertext}:${encrypted.senderPubKey}:${known_peer[selected_peer_userId]}`;
+                                                    message["content"] = encryptedMessage;
+                                                    args[2] = message;
+                                                }
+                                                return window.base_functions[function_name](...args);
                                             }
-                                            // Format: [prefix][nonce]:[ciphertext]:[senderPubKey]:[known_peer[selected_peer_userId]]
-                                            const encryptedMessage = `${prefix}${encrypted.nonce}:${encrypted.ciphertext}:${encrypted.senderPubKey}:${known_peer[selected_peer_userId]}`;
-                                            message["content"] = encryptedMessage;
-                                            args[1] = message;
-                                            console.log("hijacked result", args);
-                                        }
-                                        window.base_functions[function_name](...args);
-                                    };
+                                            break;
+                                        default:
+                                            if (multiple_functions[function_name].constructor.name == 'AsyncFunction') {
+                                                multiple_functions[function_name] = async (...args) => {
+                                                    console.log(`discrypt  async (${function_name}): ${JSON.stringify(args)}`);
+                                                    return await window.base_functions[function_name](...args);
+                                                }
+                                            } else {
+                                                multiple_functions[function_name] = (...args) => {
+                                                    console.log(`discrypt (${function_name}): ${JSON.stringify(args)}`);
+                                                    return window.base_functions[function_name](...args);
+                                                }
+                                            }
+                                            break;
+                                    }
                                     found = 1;
                                 }
                             }
@@ -422,7 +460,7 @@ initialisation of everything.
             listItem.appendChild(listItemWrapper);
             sidebarContainer.appendChild(listItem);
             createPeerSelectorUI();
-            if(callback)callback();
+            if (callback) callback();
         }
 
         function findClassNames(partialName) {
@@ -610,10 +648,11 @@ initialisation of everything.
 
         function extractMessageData(messageElement) {
             try {
-                // Extract message ID from element id (format: chat-messages-123456789)
-                const messageId = messageElement.id?.replace('chat-messages-', '');
+                // Extract message ID from element id (format: chat-messages-123456789-123456789)
+                const messageId = messageElement.id?.replace('chat-messages-', '').split("-")[1];
 
-                const contentElement = messageElement.querySelector('[id^="message-content-"]');
+                const contentElement = messageElement.querySelector(':not([class^="repliedTextContent"])[id^="message-content-"] span');
+                const ReplyElem = messageElement.querySelector(`#message-reply-context-${messageId}`);
                 if (!(contentElement && messageId)) return;
 
                 const messageContent = contentElement?.textContent;
@@ -622,9 +661,17 @@ initialisation of everything.
                     handleEncryptedMessage(messageContent, contentElement);
                 }
 
+                if(ReplyElem){
+                    const ReplyContentElement = ReplyElem.querySelector("[id^='message-content-'] span");
+                    const ReplyContent = ReplyContentElement?.textContent;
+                    if (ReplyContent?.startsWith(prefix)) {
+                        handleEncryptedMessage(ReplyContent, ReplyContentElement);
+                    }
+                }
+
                 console.log('New message detected:\n' +
                     ('Message ID:' + messageId + "\n") +
-                    ('Content:', messageContent)
+                    ('Content:'+ messageContent)
                 );
                 return { message: { elem: contentElement, id: messageId } };
             } catch (error) {
@@ -640,7 +687,7 @@ initialisation of everything.
                 const withoutPrefix = encryptedText.substring(prefix.length);
                 const parts = withoutPrefix.split(':');
                 if (parts.length !== 4) {
-                    console.log('Invalid encrypted message format, expected 4 parts, got:', parts.length);
+                    console.log('Invalid encrypted message format, expected 4 parts, got:', parts.length, parts);
                     return;
                 }
 
@@ -696,6 +743,9 @@ initialisation of everything.
             const observer = new MutationObserver((mutations) => {
                 mutations.forEach((mutation) => {
                     mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1 && node.className.startsWith("flash__")){//after a jumpToMessage call, it will create a flash div with the message inside.
+                            extractMessageData(node.querySelector("li"));
+                        }
                         if (node.nodeType === 1 && node.id?.startsWith('chat-messages-')) {
                             extractMessageData(node);
                         }
@@ -779,7 +829,7 @@ initialisation of everything.
             console.log('DisCrypt: Channel watcher initialized');
         }
 
-        createGUI(function (){
+        createGUI(function () {
             //after creating the ui, update peer listing by checking url
             updatePeerSelector(get_url_channel_id());
         });

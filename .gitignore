@@ -1,0 +1,4 @@
+server.py
+env/*
+__pycache__
+functions.txt
