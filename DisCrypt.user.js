@@ -131,6 +131,97 @@ initialisation of everything.
         }
     }
 
+
+    async function _raw_text_decryption(encryptedText) {
+        try {
+            // Parse format: [prefix][nonce]:[ciphertext]:[senderPubKey]:[recipientPubKey]
+            // Remove the prefix character properly (it's multi-byte UTF-8)
+            const withoutPrefix = encryptedText.substring(prefix.length);
+            const parts = withoutPrefix.split(':');
+            if (parts.length !== 4) {
+                console.log('Invalid encrypted message format, expected 4 parts, got:', parts.length, parts);
+                return;
+            }
+
+            if (!my_keypair) {
+                return -1;
+            }
+
+            const [nonce, ciphertext, senderPubKey, recipientPubKey] = parts;
+
+            const myPubKeyB64 = encodeBase64(my_keypair.publicKey);
+            const isSender = senderPubKey === myPubKeyB64;
+            const isRecipient = recipientPubKey === myPubKeyB64;
+
+            let decrypted;
+            try {
+                if (isSender) {
+                    decrypted = await decryptMessage(ciphertext, nonce, recipientPubKey);
+                } else if (isRecipient) {
+                    decrypted = await decryptMessage(ciphertext, nonce, senderPubKey);
+                } else {
+                    decrypted = -1;
+                }
+                return { decrypted, isSender };
+            } catch (e) {
+                console.log("failed to decrypt:", e);
+            }
+        } catch (e) {
+            console.error('Error decrypting raw text message:', error);
+        }
+    }
+
+    function extractMessageData(messageElement) {
+        try {
+            // Extract message ID from element id (format: chat-messages-123456789-123456789)
+            let messageId = messageElement.id?.replace('chat-messages-', '');
+            messageId = messageId.split("-")[messageId.split("-").length - 1];
+
+            const contentElement = messageElement.querySelector(':not([class^="repliedTextContent"])[id^="message-content-"] span');
+            const ReplyElem = messageElement.querySelector(`#message-reply-context-${messageId}`);
+            if (!(contentElement && messageId)) return;
+
+            const messageContent = contentElement?.textContent;
+
+            if (messageContent?.startsWith(prefix)) {
+                handleEncryptedMessage(messageContent, contentElement);
+            }
+
+            if (ReplyElem) {
+                const ReplyContentElement = ReplyElem.querySelector("[id^='message-content-'] span");
+                const ReplyContent = ReplyContentElement?.textContent;
+                if (ReplyContent?.startsWith(prefix)) {
+                    handleEncryptedMessage(ReplyContent, ReplyContentElement);
+                }
+            }
+
+            console.log('New message detected:\n' +
+                ('Message ID:' + messageId + "\n") +
+                ('Content:' + messageContent)
+            );
+            return { message: { elem: contentElement, id: messageId } };
+        } catch (error) {
+            console.error('Error extracting message data:', error);
+        }
+        return null;
+    }
+
+    async function handleEncryptedMessage(encryptedText, contentElement) {
+        let decrypted_data = await _raw_text_decryption(encryptedText);
+        if (decrypted_data == -1) {
+            contentElement.textContent = '[Encrypted message - not for you]';
+            contentElement.style.color = '#99aab5';
+            return;
+        }
+        if (decrypted_data) {
+            contentElement.textContent = `${decrypted_data.decrypted}`;
+            contentElement.style.color = decrypted_data.isSender ? '#5865F2' : '#43b581';
+        } else {
+            contentElement.textContent = '[Encrypted message - cannot decrypt]';
+            contentElement.style.color = '#faa61a';
+        }
+    }
+
     function wait_for_webpack(callback) {
         if (!window.webpackChunkdiscord_app) {
             return setTimeout(wait_for_webpack, 100, callback);
@@ -158,7 +249,7 @@ initialisation of everything.
                         for (let oo in module.exports) {
                             if (found) return;
                             let multiple_functions = module.exports[oo];
-                            for (let function_name of ["sendMessage", "editMessage", "patchMessageAttachments"]) {// "getSendMessageOptionsForReply","receiveMessage"]) {
+                            for (let function_name of ["sendMessage", "editMessage", "patchMessageAttachments", "startEditMessageRecord", "endEditMessage"]) {// "getSendMessageOptionsForReply","receiveMessage"]) {
                                 if (function_name in multiple_functions && multiple_functions[function_name][Symbol.toStringTag] != "IntlMessagesProxy") {
                                     window.base_functions[function_name] = multiple_functions[function_name];
                                     // console.log(function_name, multiple_functions[function_name]);
@@ -186,6 +277,25 @@ initialisation of everything.
                                                 return window.base_functions[function_name](...args);
                                             };
                                             break;
+                                        case "startEditMessageRecord":
+                                            multiple_functions[function_name] = async (...args) => {
+                                                let channel_id = args[0];
+                                                let message = args[1];
+                                                if (channel_id in known_peer) {
+                                                    selected_peer_userId = channel_id;
+                                                }
+                                                if (selected_peer_userId) {
+                                                    const decrypted_data = await _raw_text_decryption(message.content);
+                                                    if (!decrypted_data || decrypted_data == -1) {
+                                                        alert('Message encryption failed !');
+                                                        return;
+                                                    }
+                                                    message["content"] = decrypted_data.decrypted;
+                                                    args[1] = message;
+                                                }
+                                                return window.base_functions[function_name](...args);
+                                            }
+                                            break;
                                         case "editMessage":
                                             multiple_functions[function_name] = async (...args) => {
                                                 let channel_id = args[0];
@@ -205,6 +315,30 @@ initialisation of everything.
                                                     args[2] = message;
                                                 }
                                                 return window.base_functions[function_name](...args);
+                                            }
+                                            break;
+                                        case "endEditMessage":
+                                            multiple_functions[function_name] = async (...args) => {
+                                                window.base_functions[function_name](...args);
+                                                // let focusMessage do its thing
+                                                //so we can immeditaly edit the message afterward.
+                                                let channel_id = args[0];
+                                                let edit_payload = args[1];
+                                                if (channel_id in known_peer) {
+                                                    selected_peer_userId = channel_id;
+                                                }
+                                                //we get the message element then decrypt it
+                                                if (selected_peer_userId && edit_payload?.body && edit_payload?.status < 300) {
+                                                    let edited_message = document.getElementById(`chat-messages-${edit_payload.body.channel_id}-${edit_payload.body.id}`);
+                                                    const waitForEncryptedVersion = () => {
+                                                        const messageContent = edited_message.querySelector(':not([class^="repliedTextContent"])[id^="message-content-"] span').textContent || '';
+                                                        if (messageContent.startsWith(prefix)) {
+                                                            return extractMessageData(edited_message);
+                                                        } 
+                                                        setTimeout(waitForEncryptedVersion, 10);
+                                                    };
+                                                    waitForEncryptedVersion();
+                                                }
                                             }
                                             break;
                                         default:
@@ -513,7 +647,7 @@ initialisation of everything.
 
             async function buildPeerList() {
                 let peerListHTML = `<h3 style="margin: 0 0 1vh 0;">Known Peers</h3>
-<div style="margin: 1vh 0; display: flex; flex-direction:row;align-items:center;justify-content:center;gap:1vw;padding:1vh 1vw;">`;
+<div style="margin: 1vh 0; display: flex; flex-direction:column;align-items:center;justify-content:center;gap:1vw;padding:1vh 1vw;">`;
                 for (let [user_id, pubKey] of Object.entries(known_peer)) {
                     const peerHash = await sha256(pubKey);
                     const peerId = `peer-${peerHash}`;
@@ -646,90 +780,6 @@ initialisation of everything.
             });
         }
 
-        function extractMessageData(messageElement) {
-            try {
-                // Extract message ID from element id (format: chat-messages-123456789-123456789)
-                const messageId = messageElement.id?.replace('chat-messages-', '').split("-")[1];
-
-                const contentElement = messageElement.querySelector(':not([class^="repliedTextContent"])[id^="message-content-"] span');
-                const ReplyElem = messageElement.querySelector(`#message-reply-context-${messageId}`);
-                if (!(contentElement && messageId)) return;
-
-                const messageContent = contentElement?.textContent;
-
-                if (messageContent?.startsWith(prefix)) {
-                    handleEncryptedMessage(messageContent, contentElement);
-                }
-
-                if(ReplyElem){
-                    const ReplyContentElement = ReplyElem.querySelector("[id^='message-content-'] span");
-                    const ReplyContent = ReplyContentElement?.textContent;
-                    if (ReplyContent?.startsWith(prefix)) {
-                        handleEncryptedMessage(ReplyContent, ReplyContentElement);
-                    }
-                }
-
-                console.log('New message detected:\n' +
-                    ('Message ID:' + messageId + "\n") +
-                    ('Content:'+ messageContent)
-                );
-                return { message: { elem: contentElement, id: messageId } };
-            } catch (error) {
-                console.error('Error extracting message data:', error);
-            }
-            return null;
-        }
-
-        async function handleEncryptedMessage(encryptedText, contentElement) {
-            try {
-                // Parse format: [prefix][nonce]:[ciphertext]:[senderPubKey]:[recipientPubKey]
-                // Remove the prefix character properly (it's multi-byte UTF-8)
-                const withoutPrefix = encryptedText.substring(prefix.length);
-                const parts = withoutPrefix.split(':');
-                if (parts.length !== 4) {
-                    console.log('Invalid encrypted message format, expected 4 parts, got:', parts.length, parts);
-                    return;
-                }
-
-                if (!my_keypair) {
-                    contentElement.textContent = '[Encrypted message - not for you]';
-                    contentElement.style.color = '#99aab5';
-                    return;
-                }
-
-                const [nonce, ciphertext, senderPubKey, recipientPubKey] = parts;
-
-                const myPubKeyB64 = encodeBase64(my_keypair.publicKey);
-                const isSender = senderPubKey === myPubKeyB64;
-                const isRecipient = recipientPubKey === myPubKeyB64;
-
-                let decrypted;
-                try {
-                    if (isSender) {
-                        decrypted = await decryptMessage(ciphertext, nonce, recipientPubKey);
-                    } else if (isRecipient) {
-                        decrypted = await decryptMessage(ciphertext, nonce, senderPubKey);
-                    } else {
-                        contentElement.textContent = '[Encrypted message - not for you]';
-                        contentElement.style.color = '#99aab5';
-                        return;
-                    }
-                } catch (e) {
-                    console.log("failed to decrypt:", e);
-                }
-
-                if (decrypted) {
-                    contentElement.textContent = `${decrypted}`;
-                    contentElement.style.color = isSender ? '#5865F2' : '#43b581';
-                } else {
-                    contentElement.textContent = '[Encrypted message - cannot decrypt]';
-                    contentElement.style.color = '#faa61a';
-                }
-            } catch (error) {
-                console.error('Error handling encrypted message:', error);
-            }
-        }
-
         function observeMessages() {
             const chatContainer = document.querySelector('[class*="chatContent_"]');
 
@@ -743,11 +793,14 @@ initialisation of everything.
             const observer = new MutationObserver((mutations) => {
                 mutations.forEach((mutation) => {
                     mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === 1 && node.className.startsWith("flash__")){//after a jumpToMessage call, it will create a flash div with the message inside.
-                            extractMessageData(node.querySelector("li"));
+                        if (node.nodeType === 1 && node?.className?.startsWith && node?.className?.startsWith("flash__")) {//after a jumpToMessage call, it will create a flash div with the message inside.
+                            return extractMessageData(node.querySelector("li"));
                         }
                         if (node.nodeType === 1 && node.id?.startsWith('chat-messages-')) {
-                            extractMessageData(node);
+                            return extractMessageData(node);
+                        }
+                        if (node.nodeType === 1 && node.id?.startsWith('message-content-')) {
+                            return extractMessageData(node.closest("li[id^=chat-messages]"));
                         }
                     });
                 });
