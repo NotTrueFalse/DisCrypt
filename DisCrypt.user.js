@@ -214,7 +214,7 @@ initialisation of everything.
             return;
         }
         if (decrypted_data) {
-            contentElement.textContent = `${decrypted_data.decrypted}`;
+            contentElement.textContent = decrypted_data.decrypted;
             contentElement.style.color = decrypted_data.isSender ? '#5865F2' : '#43b581';
         } else {
             contentElement.textContent = '[Encrypted message - cannot decrypt]';
