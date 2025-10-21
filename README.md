@@ -13,7 +13,7 @@ Draw back:
 I'm using nacl box method, meaning X25519 ECDH + XSalsa20-Poly1305.
 
 TODO:
-- [  ] edition handling (almost)
+- [x] edition handling
 - [x] reply handling
 - [  ] file encryption / decryption
 - [  ] rewrite for easier understanding
@@ -22,3 +22,4 @@ TODO:
 - [  ] prevent xss / any dom vulnerability
 - [  ] patch bugs
 - [  ] import / export keys + secure the keys with a password.
+- [  ] link preview
