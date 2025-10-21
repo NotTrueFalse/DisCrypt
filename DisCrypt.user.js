@@ -284,7 +284,7 @@ initialisation of everything.
                                                 if (channel_id in known_peer) {
                                                     selected_peer_userId = channel_id;
                                                 }
-                                                if (selected_peer_userId) {
+                                                if (selected_peer_userId && message.content.startsWith(prefix)) {
                                                     const decrypted_data = await _raw_text_decryption(message.content);
                                                     if (!decrypted_data || decrypted_data == -1) {
                                                         alert('Message encryption failed !');
