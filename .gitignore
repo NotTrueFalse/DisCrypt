@@ -1,4 +1,4 @@
 server.py
 env/*
 __pycache__
-functions.txt
+*_functions.txt

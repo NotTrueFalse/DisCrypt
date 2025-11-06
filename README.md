@@ -1,25 +1,55 @@
-# DisCrypt - Beta
-The idea is just to talk via discord in an secure way (mostly in dm for  now)
+# DisCrypt - End-to-End Encryption for Discord
 
-You first add a peer (with the channel id of the dm with him), then you can freely chat with him, without anyone else, knowing what your conversation is about.
+Secure peer-to-peer messaging on Discord using client-side encryption. Messages and files remain encrypted end-to-end, even if your Discord account is compromised.
 
-It's a step further in security, to make discord a safer place, and to prevent, even if your account get compromised, your message to get compromised too.
+## How It Works
 
-Draw back:
-- if your computer get compromised, the attacker can get your private key (and the public key of the peer) and decrypt all the message.
-- there's no safe keysharing feature for now, so be carefull the way you exchange them, a mitm attack can be performed, if you exchange your key over an unsafe channel.
-- for now there's no forward secrecy (I'll add it soon)
+1. Add a peer by their Channel ID (DM channel) and public keys
+2. Messages auto-encrypt on send, auto-decrypt on receive, message edition is well handled
+3. Only you and the intended recipient can read your messages
+4. Encryption verified with color coding (blue = sent, green = received)
 
-I'm using nacl box method, meaning X25519 ECDH + XSalsa20-Poly1305.
+## Features
 
-TODO:
-- [x] edition handling
-- [x] reply handling
-- [  ] file encryption / decryption
-- [  ] rewrite for easier understanding
-- [  ] edit the gui so its easier to add user
-- [  ] forward secrecy (exchange new keypair every n message)
-- [  ] prevent xss / any dom vulnerability
-- [  ] patch bugs
-- [  ] import / export keys + secure the keys with a password.
-- [  ] link preview
+- End-to-end encryption using X25519 ECDH + XSalsa20-Poly1305 (TweetNaCl)
+- Automatic message encryption/decryption
+- Encrypted file attachments with Ed25519 signature verification
+- Message editing support
+- Reply handling for encrypted messages
+- Peer management UI with key storage
+- Works in DMs and group channels
+
+## Security Model
+
+**Threat Model**: Protects against message interception if your account is compromised.
+
+**Does NOT protect against**:
+- Private key compromise (if your computer is compromised)
+- Man-in-the-middle attacks during key exchange (manually exchange keys via secure channel)
+- Message metadata (timestamps, message count, presence)
+
+**Implementation Details**:
+- Private keys stored in browser localStorage only
+- Uses NaCl.box (X25519 ECDH) for asymmetric encryption
+- Ed25519 signatures for file authenticity verification
+- Sender/recipient public keys included in message format for verification
+
+## Limitations
+
+- No forward secrecy (compromise of keypair compromises all messages)
+- No built-in key exchange protocol (manual key sharing required)
+- Private keys stored in plaintext in localStorage
+- File upload MIME type spoofing (`.png` wrapper) for CORS bypass
+
+## TODO
+
+- [x] GUI improvements
+- [x] Message editing
+- [x] File encryption/decryption
+- [x] Reply handling
+- [ ] Message authenticity verification (sender signature)
+- [ ] Forward secrecy (keypair rotation)
+- [ ] Key import/export with password protection
+- [ ] Code refactor for maintainability
+- [ ] Link preview support
+- [ ] Better media handling after decryption
