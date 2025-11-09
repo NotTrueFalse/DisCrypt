@@ -12,7 +12,10 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.2/nacl-fast.min.js
 // @license      MIT
 // @namespace    https://github.com/NotTrueFalse/DisCrypt
+// @downloadURL https://update.greasyfork.org/scripts/555318/DisCrypt.user.js
+// @updateURL https://update.greasyfork.org/scripts/555318/DisCrypt.meta.js
 // ==/UserScript==
+
 
 /*
 DisCrypt - Discord E2E Encryption
