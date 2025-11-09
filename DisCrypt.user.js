@@ -9,7 +9,7 @@
 // @match        https://*.discord.com/*
 // @run-at       document-end
 // @grant        none
-// @require      https://cdn.jsdelivr.net/npm/tweetnacl
+// @require      https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.2/nacl-fast.min.js
 // @license      MIT
 // @namespace    https://github.com/NotTrueFalse/DisCrypt
 // ==/UserScript==
